@@ -11,6 +11,54 @@ const RARE_RARITY_MATCHERS = [
   /double rare/i,
 ]
 
+function normalizeName(name = '') {
+  return name.toLowerCase().replace(/[^a-z0-9]/g, '')
+}
+
+function scoreSetNameMatch(candidateName = '', query = '') {
+  const candidate = normalizeName(candidateName)
+  const target = normalizeName(query)
+
+  if (!candidate || !target) return 0
+  if (candidate === target) return 100
+  if (candidate.includes(target)) return 75
+  if (target.includes(candidate)) return 50
+
+  let overlap = 0
+  for (const char of target) {
+    if (candidate.includes(char)) overlap += 1
+  }
+  return overlap / target.length
+}
+
+async function findSetByName(setName) {
+  const exactRes = await fetch(
+    `https://api.pokemontcg.io/v2/sets?q=name:${encodeURIComponent(`"${setName}"`)}`
+  )
+
+  if (exactRes.ok) {
+    const exactData = await exactRes.json()
+    if (exactData?.data?.length) {
+      return exactData.data[0]
+    }
+  }
+
+  const broadRes = await fetch('https://api.pokemontcg.io/v2/sets?pageSize=250')
+  if (!broadRes.ok) {
+    throw new Error('Failed to fetch set metadata from pricing provider')
+  }
+
+  const broadData = await broadRes.json()
+  const sets = broadData?.data || []
+
+  const best = sets
+    .map((set) => ({ set, score: scoreSetNameMatch(set?.name, setName) }))
+    .sort((a, b) => b.score - a.score)[0]
+
+  if (!best || best.score < 0.7) return null
+  return best.set
+}
+
 function getCardMarketPrice(card) {
   const tcg = card?.tcgplayer?.prices
   if (!tcg) return null
@@ -18,7 +66,7 @@ function getCardMarketPrice(card) {
   const variants = [
     tcg.normal,
     tcg.holofoil,
-    tcg['reverseHolofoil'],
+    tcg.reverseHolofoil,
     tcg['1stEditionHolofoil'],
     tcg['1stEditionNormal'],
   ].filter(Boolean)
@@ -28,6 +76,7 @@ function getCardMarketPrice(card) {
       return variant.market
     }
   }
+
   return null
 }
 
@@ -47,22 +96,10 @@ export default async function handler(req, res) {
   const userBoosterBoxPrice = Number(boosterBoxPrice)
 
   try {
-    const setSearchRes = await fetch(
-      `https://api.pokemontcg.io/v2/sets?q=name:${encodeURIComponent(`"${setName}"`)}`
-    )
-
-    if (!setSearchRes.ok) {
-      res
-        .status(setSearchRes.status)
-        .json({ error: 'Failed to fetch set metadata from pricing provider' })
-      return
-    }
-
-    const setSearchData = await setSearchRes.json()
-    const matchedSet = setSearchData?.data?.[0]
+    const matchedSet = await findSetByName(setName)
 
     if (!matchedSet) {
-      res.status(404).json({ error: 'No matching set found for this name' })
+      res.status(404).json({ error: `No set found matching "${setName}"` })
       return
     }
 
@@ -85,9 +122,16 @@ export default async function handler(req, res) {
       .map(getCardMarketPrice)
       .filter((price) => typeof price === 'number')
 
-    const rareSlotAverage = rareSlotPrices.length
-      ? rareSlotPrices.reduce((sum, value) => sum + value, 0) / rareSlotPrices.length
-      : 0
+    if (!rareSlotPrices.length) {
+      res.status(422).json({
+        error:
+          'No eligible rare-slot market prices were found for this set. Try another set or provide a known modern set name.',
+      })
+      return
+    }
+
+    const rareSlotAverage =
+      rareSlotPrices.reduce((sum, value) => sum + value, 0) / rareSlotPrices.length
 
     const expectedValueOfPulls = rareSlotAverage * 36
 
@@ -122,6 +166,6 @@ export default async function handler(req, res) {
     })
   } catch (err) {
     console.error(err)
-    res.status(500).json({ error: 'Internal server error' })
+    res.status(500).json({ error: `EV provider error: ${err.message}` })
   }
 }

@@ -5,7 +5,7 @@ This repository contains a minimal **Next.js** prototype for a Pokémon trading 
 ## Key Features
 
 - **Card search:** Enter a card name and retrieve basic details along with up‑to‑date pricing data sourced from the [TCGdex API](https://tcgdex.dev/markets-prices) which aggregates TCGplayer (USD) and Cardmarket (EUR) prices.
-- **Set list + booster EV calculator:** Browse all official Pokémon TCG sets and run a booster EV model for a selected set. The calculator estimates rare-slot pull EV, compares it with a box buy-in, and includes available release-to-now booster price snapshots.
+- **Set list + booster EV calculator:** Browse all official Pokémon TCG sets and use the dedicated **Booster EV** tab to run a set EV model. The calculator estimates rare-slot pull EV, compares it with a box buy-in, and includes available release-to-now booster price snapshots.
 - **Price dashboard:** Visualise the low, market and high prices for a single card using a bar chart. This page demonstrates how simple analytics can be integrated; you can extend it to historical time‑series charts.
 - **News feed:** A serverless API function fetches the latest headlines from PokéBeach’s RSS feed. The front‑end currently doesn’t consume this endpoint, but it’s available for future integration.
 
