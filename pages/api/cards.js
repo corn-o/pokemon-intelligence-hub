@@ -8,13 +8,7 @@ import { resolveTcgdexImage } from '../../utils/tcgdexAssets'
  */
 
 function extractPriceSnapshot(card = {}) {
-  const marketSources = [
-    card.tcgplayer,
-    card.cardmarket,
-    card.pricing,
-    card.market,
-    card.prices,
-  ].filter(Boolean)
+  const marketSources = [card.tcgplayer, card.cardmarket, card.pricing, card.market, card.prices].filter(Boolean)
 
   let low = null
   let market = null
@@ -93,7 +87,7 @@ function mapCard(card, marketById = new Map()) {
     name: card.name,
     image: resolveTcgdexImage(rawImage) || rawImage,
     setName,
-    tcgplayer: hasAnyPrice(tcgdexPrice) ? tcgdexPrice : (externalPrice || tcgdexPrice),
+    tcgplayer: hasAnyPrice(tcgdexPrice) ? tcgdexPrice : externalPrice || tcgdexPrice,
   }
 }
 
@@ -120,7 +114,7 @@ async function fetchPokemonTcgMarketByIds(ids = []) {
 
   try {
     for (const chunk of chunks) {
-      const query = chunk.map((id) => `id:${id}`).join(' OR ')
+      const query = chunk.map((cardId) => `id:${cardId}`).join(' OR ')
       const url = `https://api.pokemontcg.io/v2/cards?q=${encodeURIComponent(query)}&select=id,tcgplayer,cardmarket`
       const timeout = AbortSignal.timeout(2500)
       const response = await fetch(url, { signal: timeout })
@@ -134,22 +128,41 @@ async function fetchPokemonTcgMarketByIds(ids = []) {
     }
 
     return aggregate
-  const query = normalizedIds.map((id) => `id:${JSON.stringify(id)}`).join(' OR ')
-  const url = `https://api.pokemontcg.io/v2/cards?q=${encodeURIComponent(query)}&select=id,tcgplayer,cardmarket`
-
-  try {
-    const response = await fetch(url)
-    if (!response.ok) throw new Error(`Pokémon TCG API failed: ${response.status}`)
-
-    const payload = await response.json()
-    const cards = Array.isArray(payload?.data) ? payload.data : []
-    const prices = cards.map((card) => [card.id, normalizePokemonTcgPrices(card)])
-
-    return new Map(prices)
   } catch (error) {
     console.warn('Unable to fetch Pokémon TCG market data:', error)
     return new Map()
   }
+}
+
+function mapPokemonTcgCard(card = {}) {
+  const price = normalizePokemonTcgPrices(card)
+  return {
+    id: card.id,
+    name: card.name,
+    image: card.images?.large || card.images?.small || '',
+    setName: card.set?.name || card.set?.id || 'Unknown',
+    tcgplayer: price,
+  }
+}
+
+async function fetchPokemonTcgCardsByName(name) {
+  const query = `name:${JSON.stringify(name)}`
+  const url = `https://api.pokemontcg.io/v2/cards?q=${encodeURIComponent(query)}&pageSize=15&select=id,name,images,set,tcgplayer,cardmarket`
+  const response = await fetch(url)
+  if (!response.ok) throw new Error(`Pokémon TCG API failed: ${response.status}`)
+
+  const payload = await response.json()
+  const cards = Array.isArray(payload?.data) ? payload.data : []
+  return cards.map(mapPokemonTcgCard)
+}
+
+async function fetchPokemonTcgCardById(id) {
+  const response = await fetch(`https://api.pokemontcg.io/v2/cards/${encodeURIComponent(id)}`)
+  if (!response.ok) throw new Error(`Pokémon TCG API failed: ${response.status}`)
+
+  const payload = await response.json()
+  if (!payload?.data) return null
+  return mapPokemonTcgCard(payload.data)
 }
 
 export default async function handler(req, res) {
@@ -170,6 +183,16 @@ export default async function handler(req, res) {
 
         res.status(200).json({ card: mapCard(card, marketById), source: 'live' })
       } catch (err) {
+        try {
+          const pokemonTcgCard = await fetchPokemonTcgCardById(id)
+          if (pokemonTcgCard) {
+            res.status(200).json({ card: pokemonTcgCard, source: 'live-pokemontcg' })
+            return
+          }
+        } catch (pokemonTcgError) {
+          console.warn('Live card fetch fallback to Pokémon TCG failed:', pokemonTcgError)
+        }
+
         const fallbackCard = fallbackCards.find((card) => card.id === id)
         if (!fallbackCard) {
           res.status(404).json({ error: 'Card not found' })
@@ -188,16 +211,22 @@ export default async function handler(req, res) {
       try {
         const payload = await fetchTcgdexJson(searchUrl)
         const cardsFromTcgdex = Array.isArray(payload) ? payload : []
-        const missingIds = cardsFromTcgdex
-          .filter((card) => !hasAnyPrice(extractPriceSnapshot(card)))
-          .map((card) => card.id)
+        const missingIds = cardsFromTcgdex.filter((card) => !hasAnyPrice(extractPriceSnapshot(card))).map((card) => card.id)
         const marketById = await fetchPokemonTcgMarketByIds(missingIds)
         const cards = cardsFromTcgdex.map((card) => mapCard(card, marketById))
-        const marketById = await fetchPokemonTcgMarketByIds((Array.isArray(payload) ? payload : []).map((card) => card.id))
-        const cards = (Array.isArray(payload) ? payload : []).map((card) => mapCard(card, marketById))
 
         res.status(200).json({ cards, source: 'live' })
       } catch (err) {
+        try {
+          const pokemonTcgCards = await fetchPokemonTcgCardsByName(name)
+          if (pokemonTcgCards.length) {
+            res.status(200).json({ cards: pokemonTcgCards, source: 'live-pokemontcg' })
+            return
+          }
+        } catch (pokemonTcgError) {
+          console.warn('Live card search fallback to Pokémon TCG failed:', pokemonTcgError)
+        }
+
         const cards = fallbackSearch(name)
         res.status(200).json({ cards, source: 'fallback' })
       }
