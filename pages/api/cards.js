@@ -1,81 +1,59 @@
 /**
- * API route for fetching card information. Supports searching by name or
- * retrieving a specific card by ID. Uses the TCGdex API to fetch card
- * listings and pricing data from Cardmarket and TCGplayer. Cardmarket
- * prices are ignored in this MVP; only TCGplayer prices are returned.
+ * API route for Pokémon card information.
+ * Uses the public Pokémon TCG API for image-rich card results and TCGplayer
+ * style pricing fields (low/market/high) when available.
  */
 
 export default async function handler(req, res) {
   const { name, id } = req.query
 
-  // Helper to fetch detailed card info by ID
-  async function fetchCardDetails(cardId) {
-    const url = `https://api.tcgdex.net/v2/en/cards/${cardId}`
-    const response = await fetch(url)
+  async function fetchCard(cardId) {
+    const response = await fetch(`https://api.pokemontcg.io/v2/cards/${cardId}`)
     if (!response.ok) throw new Error('Card details request failed')
-    const data = await response.json()
-    return data
+    const payload = await response.json()
+    return payload.data
+  }
+
+  function mapCard(card) {
+    const prices = card.tcgplayer?.prices || {}
+    const preferred =
+      prices.holofoil || prices.normal || prices.reverseHolofoil || prices['1stEditionHolofoil'] || null
+
+    return {
+      id: card.id,
+      name: card.name,
+      image: card.images?.large || card.images?.small || '',
+      setName: card.set?.name || 'Unknown',
+      tcgplayer: {
+        lowPrice: preferred?.low ?? null,
+        marketPrice: preferred?.market ?? null,
+        highPrice: preferred?.high ?? null,
+      },
+    }
   }
 
   try {
     if (id) {
-      // Return a single card detail
-      const card = await fetchCardDetails(id)
-      res.status(200).json({ card })
+      const card = await fetchCard(id)
+      res.status(200).json({ card: mapCard(card) })
       return
     }
+
     if (name) {
-      // Search for cards by name using TCGdex filtering
-      const searchUrl = `https://api.tcgdex.net/v2/en/cards?name=${encodeURIComponent(
-        name
-      )}`
+      const q = `name:*${name.replace(/"/g, '')}*`
+      const searchUrl = `https://api.pokemontcg.io/v2/cards?q=${encodeURIComponent(q)}&pageSize=15&orderBy=-set.releaseDate`
       const searchRes = await fetch(searchUrl)
       if (!searchRes.ok) {
         res.status(searchRes.status).json({ error: 'Search request failed' })
         return
       }
-      const searchData = await searchRes.json()
-      // Limit number of results to avoid heavy API usage
-      const firstTen = searchData.slice(0, 10)
-      const cards = await Promise.all(
-        firstTen.map(async (brief) => {
-          try {
-            const full = await fetchCardDetails(brief.id)
-            // Extract TCGplayer pricing for normal variant if available
-            const tcgplayer = full.pricing?.tcgplayer || null
-            let lowPrice = null
-            let marketPrice = null
-            let highPrice = null
-            if (tcgplayer) {
-              // Some cards may have multiple variants (normal, reverse holofoil, etc.)
-              const normal = tcgplayer.normal || tcgplayer['holofoil'] || tcgplayer['reverse-holofoil'] || null
-              if (normal) {
-                lowPrice = normal.lowPrice ?? null
-                marketPrice = normal.marketPrice ?? null
-                highPrice = normal.highPrice ?? null
-              }
-            }
-            return {
-              id: full.id,
-              name: full.name,
-              image: full.image,
-              setName: full.set?.name || 'Unknown',
-              tcgplayer: {
-                lowPrice,
-                marketPrice,
-                highPrice,
-              },
-            }
-          } catch (err) {
-            return null
-          }
-        })
-      )
-      // Filter out null results
-      const filtered = cards.filter(Boolean)
-      res.status(200).json({ cards: filtered })
+
+      const payload = await searchRes.json()
+      const cards = (payload.data || []).map(mapCard)
+      res.status(200).json({ cards })
       return
     }
+
     res.status(400).json({ error: 'Query parameter "name" or "id" is required' })
   } catch (err) {
     console.error(err)
