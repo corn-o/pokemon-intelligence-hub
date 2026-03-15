@@ -109,6 +109,31 @@ async function fetchPokemonTcgMarketByIds(ids = []) {
   const normalizedIds = [...new Set(ids.filter(Boolean))]
   if (!normalizedIds.length) return new Map()
 
+  const chunks = []
+  const chunkSize = 8
+
+  for (let i = 0; i < normalizedIds.length; i += chunkSize) {
+    chunks.push(normalizedIds.slice(i, i + chunkSize))
+  }
+
+  const aggregate = new Map()
+
+  try {
+    for (const chunk of chunks) {
+      const query = chunk.map((id) => `id:${id}`).join(' OR ')
+      const url = `https://api.pokemontcg.io/v2/cards?q=${encodeURIComponent(query)}&select=id,tcgplayer,cardmarket`
+      const timeout = AbortSignal.timeout(2500)
+      const response = await fetch(url, { signal: timeout })
+      if (!response.ok) throw new Error(`Pokémon TCG API failed: ${response.status}`)
+
+      const payload = await response.json()
+      const cards = Array.isArray(payload?.data) ? payload.data : []
+      cards.forEach((card) => {
+        aggregate.set(card.id, normalizePokemonTcgPrices(card))
+      })
+    }
+
+    return aggregate
   const query = normalizedIds.map((id) => `id:${JSON.stringify(id)}`).join(' OR ')
   const url = `https://api.pokemontcg.io/v2/cards?q=${encodeURIComponent(query)}&select=id,tcgplayer,cardmarket`
 
@@ -162,6 +187,12 @@ export default async function handler(req, res) {
       const searchUrl = `https://api.tcgdex.net/v2/en/cards?name=${encodeURIComponent(name)}&pagination:itemsPerPage=15`
       try {
         const payload = await fetchTcgdexJson(searchUrl)
+        const cardsFromTcgdex = Array.isArray(payload) ? payload : []
+        const missingIds = cardsFromTcgdex
+          .filter((card) => !hasAnyPrice(extractPriceSnapshot(card)))
+          .map((card) => card.id)
+        const marketById = await fetchPokemonTcgMarketByIds(missingIds)
+        const cards = cardsFromTcgdex.map((card) => mapCard(card, marketById))
         const marketById = await fetchPokemonTcgMarketByIds((Array.isArray(payload) ? payload : []).map((card) => card.id))
         const cards = (Array.isArray(payload) ? payload : []).map((card) => mapCard(card, marketById))
 
