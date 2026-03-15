@@ -1,28 +1,39 @@
 import Link from 'next/link'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 
 export default function Home() {
   const [query, setQuery] = useState('pikachu')
   const [results, setResults] = useState([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [source, setSource] = useState('live')
 
-  async function searchCards(e) {
-    e.preventDefault()
-    if (!query) return
+  async function runSearch(name) {
+    if (!name) return
     setLoading(true)
     setError('')
     try {
-      const res = await fetch(`/api/cards?name=${encodeURIComponent(query)}`)
+      const res = await fetch(`/api/cards?name=${encodeURIComponent(name)}`)
       if (!res.ok) throw new Error('Request failed')
       const data = await res.json()
       setResults(data.cards || [])
+      setSource(data.source || 'live')
     } catch (err) {
       setError('Failed to fetch cards. Try again later.')
+      setSource('live')
     } finally {
       setLoading(false)
     }
   }
+
+  function searchCards(e) {
+    e.preventDefault()
+    runSearch(query)
+  }
+
+  useEffect(() => {
+    runSearch(query)
+  }, [])
 
   return (
     <div className="space-y-10">
@@ -53,18 +64,23 @@ export default function Home() {
             placeholder="Search a card (e.g. Charizard)"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            className="w-full rounded-lg border border-slate-700 bg-slate-950 px-4 py-2.5 text-slate-100 outline-none ring-cyan-300 placeholder:text-slate-500 focus:ring"
+            className="w-full rounded-lg border border-slate-600 bg-slate-900 px-4 py-2.5 text-slate-100 outline-none ring-cyan-300 placeholder:text-slate-500 focus:ring"
           />
           <button type="submit" className="rounded-lg bg-cyan-400 px-5 py-2.5 font-semibold text-slate-900 hover:bg-cyan-300">
             {loading ? 'Searching…' : 'Search'}
           </button>
         </form>
         {error && <p className="mt-3 text-sm text-rose-300">{error}</p>}
+        {source === 'fallback' && (
+          <p className="mt-3 rounded-lg border border-amber-500/40 bg-amber-400/10 px-3 py-2 text-xs text-amber-200">
+            Live API is unavailable. Showing fallback card data.
+          </p>
+        )}
 
         {results.length > 0 && (
           <div className="mt-6 grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-5">
             {results.map((card) => (
-              <article key={card.id} className="group overflow-hidden rounded-xl border border-slate-800 bg-slate-950/90">
+              <article key={card.id} className="group overflow-hidden rounded-xl border border-slate-800 bg-slate-900/85">
                 <img
                   src={card.image}
                   alt={card.name}

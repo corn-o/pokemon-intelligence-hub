@@ -1,11 +1,8 @@
-/**
- * API route to fetch the latest Pokémon TCG news from PokéBeach. It uses
- * rss-parser to consume the site's RSS feed. Only basic fields are
- * returned to keep the response lightweight. Because the serverless
- * environment may block outbound requests during local development,
- * ensure the function handles errors gracefully.
- */
+import { fallbackNews } from '../../data/fallbackData'
 
+/**
+ * API route to fetch the latest Pokémon TCG news from PokéBeach.
+ */
 export default async function handler(req, res) {
   try {
     const Parser = (await import('rss-parser')).default
@@ -17,9 +14,9 @@ export default async function handler(req, res) {
       pubDate: item.pubDate,
       snippet: item.contentSnippet || item.content || '',
     }))
-    res.status(200).json({ items })
+    res.status(200).json({ items, source: 'live' })
   } catch (err) {
     console.error(err)
-    res.status(500).json({ error: 'Failed to load news feed' })
+    res.status(200).json({ items: fallbackNews, source: 'fallback' })
   }
 }

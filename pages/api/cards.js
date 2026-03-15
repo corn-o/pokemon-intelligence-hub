@@ -1,3 +1,5 @@
+import { fallbackCards } from '../../data/fallbackData'
+
 /**
  * API route for Pokémon card information.
  * Uses the public Pokémon TCG API for image-rich card results and TCGplayer
@@ -6,6 +8,11 @@
 
 export default async function handler(req, res) {
   const { name, id } = req.query
+
+  function fallbackSearch(queryName = '') {
+    const q = queryName.toLowerCase()
+    return fallbackCards.filter((card) => card.name.toLowerCase().includes(q))
+  }
 
   async function fetchCard(cardId) {
     const response = await fetch(`https://api.pokemontcg.io/v2/cards/${cardId}`)
@@ -34,23 +41,37 @@ export default async function handler(req, res) {
 
   try {
     if (id) {
-      const card = await fetchCard(id)
-      res.status(200).json({ card: mapCard(card) })
+      try {
+        const card = await fetchCard(id)
+        res.status(200).json({ card: mapCard(card), source: 'live' })
+      } catch (err) {
+        const fallbackCard = fallbackCards.find((card) => card.id === id)
+        if (!fallbackCard) {
+          res.status(404).json({ error: 'Card not found' })
+          return
+        }
+        res.status(200).json({ card: fallbackCard, source: 'fallback' })
+      }
       return
     }
 
     if (name) {
       const q = `name:*${name.replace(/"/g, '')}*`
       const searchUrl = `https://api.pokemontcg.io/v2/cards?q=${encodeURIComponent(q)}&pageSize=15&orderBy=-set.releaseDate`
-      const searchRes = await fetch(searchUrl)
-      if (!searchRes.ok) {
-        res.status(searchRes.status).json({ error: 'Search request failed' })
-        return
-      }
+      try {
+        const searchRes = await fetch(searchUrl)
+        if (!searchRes.ok) {
+          res.status(searchRes.status).json({ error: 'Search request failed' })
+          return
+        }
 
-      const payload = await searchRes.json()
-      const cards = (payload.data || []).map(mapCard)
-      res.status(200).json({ cards })
+        const payload = await searchRes.json()
+        const cards = (payload.data || []).map(mapCard)
+        res.status(200).json({ cards, source: 'live' })
+      } catch (err) {
+        const cards = fallbackSearch(name)
+        res.status(200).json({ cards, source: 'fallback' })
+      }
       return
     }
 

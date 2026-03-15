@@ -1,29 +1,26 @@
-/**
- * API route to return a list of Pokémon TCG sets. This wrapper around
- * the TCGdex REST API is used because Netlify functions allow server-side
- * calls to third-party APIs without exposing keys or CORS issues. In
- * this MVP only the set ID, name and card counts are returned.
- */
+import { fallbackSets } from '../../data/fallbackData'
 
+/**
+ * API route to return a list of Pokémon TCG sets.
+ */
 export default async function handler(req, res) {
   try {
     const response = await fetch('https://api.tcgdex.net/v2/en/sets')
-    if (!response.ok) {
-      res.status(response.status).json({ error: 'Failed to fetch sets' })
-      return
-    }
+    if (!response.ok) throw new Error('Failed to fetch sets')
+
     const data = await response.json()
-    // Ensure we return only sets with a name and card count
     const sets = data
       .filter((set) => set.name && set.cardCount)
       .map((set) => ({
         id: set.id,
         name: set.name,
         cardCount: set.cardCount,
+        symbol: set.logo || set.symbol || null,
       }))
-    res.status(200).json({ sets })
+
+    res.status(200).json({ sets, source: 'live' })
   } catch (err) {
     console.error(err)
-    res.status(500).json({ error: 'Internal server error' })
+    res.status(200).json({ sets: fallbackSets, source: 'fallback' })
   }
 }
