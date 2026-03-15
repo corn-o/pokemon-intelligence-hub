@@ -17,6 +17,7 @@ export default function Layout({ children }) {
           <Link href="/sets">Sets</Link>
           <Link href="/cards">Cards</Link>
           <Link href="/dashboard">Dashboard</Link>
+          <Link href="/booster-ev">Booster EV</Link>
         </div>
       </nav>
       <main>{children}</main>

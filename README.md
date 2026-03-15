@@ -5,7 +5,7 @@ This repository contains a minimal **Next.js** prototype for a Pokémon trading 
 ## Key Features
 
 - **Card search:** Enter a card name and retrieve basic details along with up‑to‑date pricing data sourced from the [TCGdex API](https://tcgdex.dev/markets-prices) which aggregates TCGplayer (USD) and Cardmarket (EUR) prices.
-- **Set list:** Browse all official Pokémon TCG sets with their unique identifiers and card counts. In future iterations this could be expanded to split sets into past and upcoming releases by parsing news feeds.
+- **Set list + booster EV calculator:** Browse all official Pokémon TCG sets and use the dedicated **Booster EV** tab to run a set EV model. The calculator estimates rare-slot pull EV, compares it with a box buy-in, and includes available release-to-now booster price snapshots.
 - **Price dashboard:** Visualise the low, market and high prices for a single card using a bar chart. This page demonstrates how simple analytics can be integrated; you can extend it to historical time‑series charts.
 - **News feed:** A serverless API function fetches the latest headlines from PokéBeach’s RSS feed. The front‑end currently doesn’t consume this endpoint, but it’s available for future integration.
 
@@ -43,6 +43,8 @@ The current codebase is intentionally lightweight. Here are some ideas for futur
 
 - **User accounts:** Allow collectors and resellers to log in, save watch lists and track purchase histories.
 - **Historical pricing charts:** Fetch and display price trends over time using the Cardmarket and TCGplayer historical endpoints, if available.
+
+- **Richer historical data:** Replace the seeded booster-box snapshots with a dedicated historical feed (e.g. eBay sold listings API, TCGplayer authenticated data, or a warehoused price time-series).
 - **Upcoming set forecasts:** Parse news articles to identify rumoured card lists and use basic machine‑learning models to predict which existing cards might spike in value when new sets drop.
 - **Marketplace links:** Provide affiliate or direct purchase links to reputable sellers based on region and stock levels.
 
