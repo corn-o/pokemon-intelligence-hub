@@ -3,8 +3,8 @@ import { resolveTcgdexImage } from '../../utils/tcgdexAssets'
 
 /**
  * API route for Pokémon card information.
- * Uses TCGdex card + markets data to avoid the historical instability we saw
- * with previous providers.
+ * Uses TCGdex for stable card metadata/images and augments market prices
+ * from Pokémon TCG API when TCGdex does not include market snapshots.
  */
 
 function extractPriceSnapshot(card = {}) {
@@ -55,16 +55,45 @@ function extractPriceSnapshot(card = {}) {
   }
 }
 
-function mapCard(card) {
+function normalizePokemonTcgPrices(card = {}) {
+  const prices = card.tcgplayer?.prices || {}
+  const candidates = Object.values(prices).filter((entry) => entry && typeof entry === 'object')
+
+  if (!candidates.length) {
+    return {
+      lowPrice: null,
+      marketPrice: card.cardmarket?.prices?.averageSellPrice ?? null,
+      highPrice: null,
+    }
+  }
+
+  const lows = candidates.map((entry) => entry.low).filter((value) => typeof value === 'number' && Number.isFinite(value))
+  const markets = candidates.map((entry) => entry.market).filter((value) => typeof value === 'number' && Number.isFinite(value))
+  const highs = candidates.map((entry) => entry.high).filter((value) => typeof value === 'number' && Number.isFinite(value))
+
+  return {
+    lowPrice: lows.length ? Math.min(...lows) : null,
+    marketPrice: markets.length ? markets[0] : null,
+    highPrice: highs.length ? Math.max(...highs) : null,
+  }
+}
+
+function hasAnyPrice(price = {}) {
+  return [price.lowPrice, price.marketPrice, price.highPrice].some((value) => typeof value === 'number')
+}
+
+function mapCard(card, marketById = new Map()) {
   const setName = card.set?.name || card.set?.id || 'Unknown'
   const rawImage = card.image || card.imageUrl || card.images?.large || card.images?.small || ''
+  const tcgdexPrice = extractPriceSnapshot(card)
+  const externalPrice = marketById.get(card.id)
 
   return {
     id: card.id,
     name: card.name,
     image: resolveTcgdexImage(rawImage) || rawImage,
     setName,
-    tcgplayer: extractPriceSnapshot(card),
+    tcgplayer: hasAnyPrice(tcgdexPrice) ? tcgdexPrice : (externalPrice || tcgdexPrice),
   }
 }
 
@@ -74,6 +103,28 @@ async function fetchTcgdexJson(url) {
     throw new Error(`TCGdex request failed: ${response.status}`)
   }
   return response.json()
+}
+
+async function fetchPokemonTcgMarketByIds(ids = []) {
+  const normalizedIds = [...new Set(ids.filter(Boolean))]
+  if (!normalizedIds.length) return new Map()
+
+  const query = normalizedIds.map((id) => `id:${JSON.stringify(id)}`).join(' OR ')
+  const url = `https://api.pokemontcg.io/v2/cards?q=${encodeURIComponent(query)}&select=id,tcgplayer,cardmarket`
+
+  try {
+    const response = await fetch(url)
+    if (!response.ok) throw new Error(`Pokémon TCG API failed: ${response.status}`)
+
+    const payload = await response.json()
+    const cards = Array.isArray(payload?.data) ? payload.data : []
+    const prices = cards.map((card) => [card.id, normalizePokemonTcgPrices(card)])
+
+    return new Map(prices)
+  } catch (error) {
+    console.warn('Unable to fetch Pokémon TCG market data:', error)
+    return new Map()
+  }
 }
 
 export default async function handler(req, res) {
@@ -90,7 +141,9 @@ export default async function handler(req, res) {
     if (id) {
       try {
         const card = await fetchTcgdexJson(`https://api.tcgdex.net/v2/en/cards/${encodeURIComponent(id)}`)
-        res.status(200).json({ card: mapCard(card), source: 'live' })
+        const marketById = await fetchPokemonTcgMarketByIds([card.id])
+
+        res.status(200).json({ card: mapCard(card, marketById), source: 'live' })
       } catch (err) {
         const fallbackCard = fallbackCards.find((card) => card.id === id)
         if (!fallbackCard) {
@@ -109,7 +162,9 @@ export default async function handler(req, res) {
       const searchUrl = `https://api.tcgdex.net/v2/en/cards?name=${encodeURIComponent(name)}&pagination:itemsPerPage=15`
       try {
         const payload = await fetchTcgdexJson(searchUrl)
-        const cards = (Array.isArray(payload) ? payload : []).map(mapCard)
+        const marketById = await fetchPokemonTcgMarketByIds((Array.isArray(payload) ? payload : []).map((card) => card.id))
+        const cards = (Array.isArray(payload) ? payload : []).map((card) => mapCard(card, marketById))
+
         res.status(200).json({ cards, source: 'live' })
       } catch (err) {
         const cards = fallbackSearch(name)
