@@ -1,5 +1,4 @@
 const DEFAULT_ASSET_QUALITY = 'high'
-const DEFAULT_ASSET_EXTENSION = 'webp'
 
 export function normalizeTcgdexAssetUrl(url) {
   if (!url || typeof url !== 'string') return null
@@ -18,7 +17,7 @@ export function normalizeTcgdexAssetUrl(url) {
     ? withoutTrailingSlash
     : `${withoutTrailingSlash}/${DEFAULT_ASSET_QUALITY}`
 
-  return `${withQuality}.${DEFAULT_ASSET_EXTENSION}`
+  return withQuality
 }
 
 export function resolveTcgdexImage(value) {

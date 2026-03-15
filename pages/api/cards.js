@@ -134,6 +134,18 @@ async function fetchPokemonTcgMarketByIds(ids = []) {
     }
 
     return aggregate
+  const query = normalizedIds.map((id) => `id:${JSON.stringify(id)}`).join(' OR ')
+  const url = `https://api.pokemontcg.io/v2/cards?q=${encodeURIComponent(query)}&select=id,tcgplayer,cardmarket`
+
+  try {
+    const response = await fetch(url)
+    if (!response.ok) throw new Error(`Pokémon TCG API failed: ${response.status}`)
+
+    const payload = await response.json()
+    const cards = Array.isArray(payload?.data) ? payload.data : []
+    const prices = cards.map((card) => [card.id, normalizePokemonTcgPrices(card)])
+
+    return new Map(prices)
   } catch (error) {
     console.warn('Unable to fetch Pokémon TCG market data:', error)
     return new Map()
@@ -181,6 +193,8 @@ export default async function handler(req, res) {
           .map((card) => card.id)
         const marketById = await fetchPokemonTcgMarketByIds(missingIds)
         const cards = cardsFromTcgdex.map((card) => mapCard(card, marketById))
+        const marketById = await fetchPokemonTcgMarketByIds((Array.isArray(payload) ? payload : []).map((card) => card.id))
+        const cards = (Array.isArray(payload) ? payload : []).map((card) => mapCard(card, marketById))
 
         res.status(200).json({ cards, source: 'live' })
       } catch (err) {
