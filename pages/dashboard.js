@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Bar } from 'react-chartjs-2'
 import {
   Chart as ChartJS,
@@ -17,24 +17,35 @@ export default function DashboardPage() {
   const [card, setCard] = useState(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [source, setSource] = useState('live')
 
-  async function searchCard(e) {
-    e.preventDefault()
-    if (!query) return
+  async function runSearch(name) {
+    if (!name) return
     setLoading(true)
     setError('')
     try {
-      const res = await fetch(`/api/cards?name=${encodeURIComponent(query)}`)
+      const res = await fetch(`/api/cards?name=${encodeURIComponent(name)}`)
       if (!res.ok) throw new Error('Request failed')
       const data = await res.json()
       setCard(data.cards?.[0] || null)
+      setSource(data.source || 'live')
     } catch (err) {
       setError('Failed to fetch pricing. Try again later.')
       setCard(null)
+      setSource('live')
     } finally {
       setLoading(false)
     }
   }
+
+  function searchCard(e) {
+    e.preventDefault()
+    runSearch(query)
+  }
+
+  useEffect(() => {
+    runSearch(query)
+  }, [])
 
   const chartData = card
     ? {
@@ -75,6 +86,11 @@ export default function DashboardPage() {
         </form>
 
         {error && <p className="mt-3 text-sm text-rose-300">{error}</p>}
+        {source === 'fallback' && (
+          <p className="mt-3 rounded-lg border border-amber-500/40 bg-amber-400/10 px-3 py-2 text-xs text-amber-200">
+            Live pricing API is unavailable. Showing fallback card pricing.
+          </p>
+        )}
       </section>
 
       {card && chartData && (

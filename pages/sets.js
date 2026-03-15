@@ -4,6 +4,7 @@ export default function SetsPage() {
   const [sets, setSets] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [source, setSource] = useState('live')
 
   useEffect(() => {
     async function loadSets() {
@@ -12,8 +13,10 @@ export default function SetsPage() {
         if (!res.ok) throw new Error('Request failed')
         const data = await res.json()
         setSets(data.sets || [])
+        setSource(data.source || 'live')
       } catch (err) {
         setError('Failed to load sets. Try again later.')
+        setSource('live')
       } finally {
         setLoading(false)
       }
@@ -26,6 +29,11 @@ export default function SetsPage() {
       <section className="rounded-2xl border border-slate-800 bg-slate-900/60 p-6">
         <h1 className="text-3xl font-black text-white">Pokémon TCG Sets</h1>
         <p className="mt-2 text-slate-300">Browse sets with logos and card totals.</p>
+        {source === 'fallback' && (
+          <p className="mt-3 rounded-lg border border-amber-500/40 bg-amber-400/10 px-3 py-2 text-xs text-amber-200">
+            Live set API is unavailable. Showing fallback set data.
+          </p>
+        )}
       </section>
 
       {loading && <p className="text-slate-300">Loading sets…</p>}

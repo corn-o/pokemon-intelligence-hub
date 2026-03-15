@@ -1,28 +1,39 @@
 import Link from 'next/link'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 
 export default function Home() {
   const [query, setQuery] = useState('pikachu')
   const [results, setResults] = useState([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [source, setSource] = useState('live')
 
-  async function searchCards(e) {
-    e.preventDefault()
-    if (!query) return
+  async function runSearch(name) {
+    if (!name) return
     setLoading(true)
     setError('')
     try {
-      const res = await fetch(`/api/cards?name=${encodeURIComponent(query)}`)
+      const res = await fetch(`/api/cards?name=${encodeURIComponent(name)}`)
       if (!res.ok) throw new Error('Request failed')
       const data = await res.json()
       setResults(data.cards || [])
+      setSource(data.source || 'live')
     } catch (err) {
       setError('Failed to fetch cards. Try again later.')
+      setSource('live')
     } finally {
       setLoading(false)
     }
   }
+
+  function searchCards(e) {
+    e.preventDefault()
+    runSearch(query)
+  }
+
+  useEffect(() => {
+    runSearch(query)
+  }, [])
 
   return (
     <div className="space-y-10">
@@ -60,6 +71,11 @@ export default function Home() {
           </button>
         </form>
         {error && <p className="mt-3 text-sm text-rose-300">{error}</p>}
+        {source === 'fallback' && (
+          <p className="mt-3 rounded-lg border border-amber-500/40 bg-amber-400/10 px-3 py-2 text-xs text-amber-200">
+            Live API is unavailable. Showing fallback card data.
+          </p>
+        )}
 
         {results.length > 0 && (
           <div className="mt-6 grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-5">
