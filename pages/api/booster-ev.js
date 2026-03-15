@@ -32,27 +32,18 @@ function scoreSetNameMatch(candidateName = '', query = '') {
   return overlap / target.length
 }
 
+async function fetchTcgdexJson(url) {
+  const response = await fetch(url)
+  if (!response.ok) {
+    throw new Error(`TCGdex request failed: ${response.status}`)
+  }
+  return response.json()
+}
+
 async function findSetByName(setName) {
-  const exactRes = await fetch(
-    `https://api.pokemontcg.io/v2/sets?q=name:${encodeURIComponent(`"${setName}"`)}`
-  )
+  const sets = await fetchTcgdexJson('https://api.tcgdex.net/v2/en/sets')
 
-  if (exactRes.ok) {
-    const exactData = await exactRes.json()
-    if (exactData?.data?.length) {
-      return exactData.data[0]
-    }
-  }
-
-  const broadRes = await fetch('https://api.pokemontcg.io/v2/sets?pageSize=250')
-  if (!broadRes.ok) {
-    throw new Error('Failed to fetch set metadata from pricing provider')
-  }
-
-  const broadData = await broadRes.json()
-  const sets = broadData?.data || []
-
-  const best = sets
+  const best = (sets || [])
     .map((set) => ({ set, score: scoreSetNameMatch(set?.name, setName) }))
     .sort((a, b) => b.score - a.score)[0]
 
@@ -60,30 +51,62 @@ async function findSetByName(setName) {
   return best.set
 }
 
-function getCardMarketPrice(card) {
-  const tcg = card?.tcgplayer?.prices
-  if (!tcg) return null
-
-  const variants = [
-    tcg.normal,
-    tcg.holofoil,
-    tcg.reverseHolofoil,
-    tcg['1stEditionHolofoil'],
-    tcg['1stEditionNormal'],
+function extractMarketPrice(card = {}) {
+  const marketSources = [
+    card.tcgplayer,
+    card.cardmarket,
+    card.pricing,
+    card.market,
+    card.prices,
   ].filter(Boolean)
 
-  for (const variant of variants) {
-    if (typeof variant.market === 'number') {
-      return variant.market
+  const candidates = []
+
+  const visit = (value) => {
+    if (!value || typeof value !== 'object') return
+
+    for (const [key, raw] of Object.entries(value)) {
+      if (typeof raw === 'number' && Number.isFinite(raw)) {
+        const weight = /(market|mid|trend|average|avg|sell)/i.test(key) ? 2 : 1
+        for (let i = 0; i < weight; i += 1) candidates.push(raw)
+      } else if (raw && typeof raw === 'object') {
+        visit(raw)
+      }
     }
   }
 
-  return null
+  marketSources.forEach(visit)
+
+  if (!candidates.length) return null
+
+  const sorted = candidates.sort((a, b) => a - b)
+  return sorted[Math.floor(sorted.length / 2)]
 }
 
 function looksLikeRareSlotCard(card) {
   const rarity = card?.rarity || ''
   return RARE_RARITY_MATCHERS.some((matcher) => matcher.test(rarity))
+}
+
+async function fetchSetCards(setId) {
+  const attempts = [
+    `https://api.tcgdex.net/v2/en/cards?set=${encodeURIComponent(setId)}&pagination:itemsPerPage=250`,
+    `https://api.tcgdex.net/v2/en/cards?set.id=${encodeURIComponent(setId)}&pagination:itemsPerPage=250`,
+  ]
+
+  for (const url of attempts) {
+    try {
+      const data = await fetchTcgdexJson(url)
+      if (Array.isArray(data) && data.length) return data
+    } catch (err) {
+      // Try next URL shape
+    }
+  }
+
+  const setPayload = await fetchTcgdexJson(`https://api.tcgdex.net/v2/en/sets/${encodeURIComponent(setId)}`)
+  if (Array.isArray(setPayload?.cards)) return setPayload.cards
+
+  return []
 }
 
 export default async function handler(req, res) {
@@ -104,20 +127,11 @@ export default async function handler(req, res) {
       return
     }
 
-    const cardsRes = await fetch(
-      `https://api.pokemontcg.io/v2/cards?q=set.id:${matchedSet.id}&pageSize=250`
-    )
-
-    if (!cardsRes.ok) {
-      throw new Error('Failed to fetch card pricing from pricing provider')
-    }
-
-    const cardsData = await cardsRes.json()
-    const cards = cardsData?.data || []
+    const cards = await fetchSetCards(matchedSet.id)
 
     const rareSlotCards = cards.filter(looksLikeRareSlotCard)
     const rareSlotPrices = rareSlotCards
-      .map(getCardMarketPrice)
+      .map(extractMarketPrice)
       .filter((price) => typeof price === 'number')
 
     if (!rareSlotPrices.length) {
@@ -133,7 +147,7 @@ export default async function handler(req, res) {
 
     const expectedValueOfPulls = rareSlotAverage * 36
 
-    const fallbackBoxPrice = matchedSet?.tcgplayer?.prices?.normal?.market
+    const fallbackBoxPrice = extractMarketPrice(matchedSet)
     const boosterPrice = Number.isFinite(userBoosterBoxPrice)
       ? userBoosterBoxPrice
       : Number.isFinite(fallbackBoxPrice)
