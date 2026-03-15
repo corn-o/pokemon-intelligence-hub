@@ -35,7 +35,7 @@ export default function CardsPage() {
             placeholder="Try: Mew, Gengar, Rayquaza..."
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            className="w-full rounded-lg border border-slate-700 bg-slate-950 px-4 py-2.5 text-slate-100 outline-none ring-cyan-300 placeholder:text-slate-500 focus:ring"
+            className="w-full rounded-lg border border-slate-600 bg-slate-900 px-4 py-2.5 text-slate-100 outline-none ring-cyan-300 placeholder:text-slate-500 focus:ring"
           />
           <button type="submit" className="rounded-lg bg-cyan-400 px-5 py-2.5 font-semibold text-slate-900 hover:bg-cyan-300">
             {loading ? 'Searching…' : 'Search Cards'}
@@ -55,7 +55,7 @@ export default function CardsPage() {
               <div className="space-y-1.5 p-3">
                 <h2 className="truncate font-semibold text-white">{card.name}</h2>
                 <p className="truncate text-sm text-slate-400">{card.setName}</p>
-                <div className="rounded-lg bg-slate-950 p-2 text-xs text-slate-300">
+                <div className="rounded-lg bg-slate-800/80 p-2 text-xs text-slate-200">
                   <p>{card.tcgplayer?.lowPrice != null ? `Low: $${card.tcgplayer.lowPrice.toFixed(2)}` : 'Low: N/A'}</p>
                   <p>
                     {card.tcgplayer?.marketPrice != null

@@ -53,7 +53,7 @@ export default function Home() {
             placeholder="Search a card (e.g. Charizard)"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            className="w-full rounded-lg border border-slate-700 bg-slate-950 px-4 py-2.5 text-slate-100 outline-none ring-cyan-300 placeholder:text-slate-500 focus:ring"
+            className="w-full rounded-lg border border-slate-600 bg-slate-900 px-4 py-2.5 text-slate-100 outline-none ring-cyan-300 placeholder:text-slate-500 focus:ring"
           />
           <button type="submit" className="rounded-lg bg-cyan-400 px-5 py-2.5 font-semibold text-slate-900 hover:bg-cyan-300">
             {loading ? 'Searching…' : 'Search'}
@@ -64,7 +64,7 @@ export default function Home() {
         {results.length > 0 && (
           <div className="mt-6 grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-5">
             {results.map((card) => (
-              <article key={card.id} className="group overflow-hidden rounded-xl border border-slate-800 bg-slate-950/90">
+              <article key={card.id} className="group overflow-hidden rounded-xl border border-slate-800 bg-slate-900/85">
                 <img
                   src={card.image}
                   alt={card.name}

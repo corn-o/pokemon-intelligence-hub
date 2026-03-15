@@ -1,11 +1,5 @@
 import { useEffect, useState } from 'react'
 
-/**
- * Page that lists all Pokémon TCG sets. In a future version, this page
- * could split the sets into past and upcoming releases by combining
- * information from TCGdex with news scraped from PokéBeach. For now it
- * displays the official set list and card counts.
- */
 export default function SetsPage() {
   const [sets, setSets] = useState([])
   const [loading, setLoading] = useState(true)
@@ -17,7 +11,7 @@ export default function SetsPage() {
         const res = await fetch('/api/sets')
         if (!res.ok) throw new Error('Request failed')
         const data = await res.json()
-        setSets(data.sets)
+        setSets(data.sets || [])
       } catch (err) {
         setError('Failed to load sets. Try again later.')
       } finally {
@@ -28,29 +22,32 @@ export default function SetsPage() {
   }, [])
 
   return (
-    <div>
-      <h1>Pokémon TCG Sets</h1>
-      {loading && <p>Loading sets…</p>}
-      {error && <p style={{ color: 'red' }}>{error}</p>}
+    <div className="space-y-6">
+      <section className="rounded-2xl border border-slate-800 bg-slate-900/60 p-6">
+        <h1 className="text-3xl font-black text-white">Pokémon TCG Sets</h1>
+        <p className="mt-2 text-slate-300">Browse sets with logos and card totals.</p>
+      </section>
+
+      {loading && <p className="text-slate-300">Loading sets…</p>}
+      {error && <p className="text-rose-300">{error}</p>}
+
       {!loading && !error && (
-        <table className="table">
-          <thead>
-            <tr>
-              <th>Set Name</th>
-              <th>Set ID</th>
-              <th>Total Cards</th>
-            </tr>
-          </thead>
-          <tbody>
-            {sets.map((set) => (
-              <tr key={set.id}>
-                <td>{set.name}</td>
-                <td>{set.id}</td>
-                <td>{set.cardCount.total}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {sets.map((set) => (
+            <article key={set.id} className="rounded-xl border border-slate-800 bg-slate-900/70 p-4">
+              {set.symbol ? (
+                <img src={set.symbol} alt={`${set.name} symbol`} className="h-12 w-auto object-contain" />
+              ) : (
+                <div className="h-12" />
+              )}
+              <h2 className="mt-3 text-lg font-semibold text-white">{set.name}</h2>
+              <p className="text-sm text-slate-400">Set ID: {set.id}</p>
+              <p className="mt-2 inline-flex rounded-md bg-slate-800/80 px-2 py-1 text-sm text-slate-200">
+                Total cards: {set.cardCount?.total ?? 'N/A'}
+              </p>
+            </article>
+          ))}
+        </section>
       )}
     </div>
   )
