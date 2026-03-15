@@ -1,4 +1,9 @@
 import { fallbackSets } from '../../data/fallbackData'
+import { resolveTcgdexImage } from '../../utils/tcgdexAssets'
+
+function resolveSetSymbol(set) {
+  return resolveTcgdexImage(set.logo) || resolveTcgdexImage(set.symbol)
+}
 
 /**
  * API route to return a list of Pokémon TCG sets.
@@ -15,7 +20,7 @@ export default async function handler(req, res) {
         id: set.id,
         name: set.name,
         cardCount: set.cardCount,
-        symbol: set.logo || set.symbol || null,
+        symbol: resolveSetSymbol(set),
       }))
 
     res.status(200).json({ sets, source: 'live' })

@@ -1,4 +1,5 @@
 import { fallbackCards } from '../../data/fallbackData'
+import { resolveTcgdexImage } from '../../utils/tcgdexAssets'
 
 /**
  * API route for Pokémon card information.
@@ -11,7 +12,9 @@ export default async function handler(req, res) {
 
   function fallbackSearch(queryName = '') {
     const q = queryName.toLowerCase()
-    return fallbackCards.filter((card) => card.name.toLowerCase().includes(q))
+    return fallbackCards
+      .filter((card) => card.name.toLowerCase().includes(q))
+      .map((card) => ({ ...card, image: resolveTcgdexImage(card.image) || card.image }))
   }
 
   async function fetchCard(cardId) {
@@ -26,10 +29,12 @@ export default async function handler(req, res) {
     const preferred =
       prices.holofoil || prices.normal || prices.reverseHolofoil || prices['1stEditionHolofoil'] || null
 
+    const rawImage = card.images?.large || card.images?.small || ''
+
     return {
       id: card.id,
       name: card.name,
-      image: card.images?.large || card.images?.small || '',
+      image: resolveTcgdexImage(rawImage) || rawImage,
       setName: card.set?.name || 'Unknown',
       tcgplayer: {
         lowPrice: preferred?.low ?? null,
@@ -50,7 +55,10 @@ export default async function handler(req, res) {
           res.status(404).json({ error: 'Card not found' })
           return
         }
-        res.status(200).json({ card: fallbackCard, source: 'fallback' })
+        res.status(200).json({
+          card: { ...fallbackCard, image: resolveTcgdexImage(fallbackCard.image) || fallbackCard.image },
+          source: 'fallback',
+        })
       }
       return
     }
