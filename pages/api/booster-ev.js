@@ -109,6 +109,33 @@ async function fetchSetCards(setId) {
   return []
 }
 
+async function fetchPokemonTcgSetByName(setName) {
+  const query = `name:${JSON.stringify(setName)}`
+  const url = `https://api.pokemontcg.io/v2/sets?q=${encodeURIComponent(query)}&pageSize=25&orderBy=-releaseDate`
+  const response = await fetch(url)
+  if (!response.ok) throw new Error(`Pokémon TCG set lookup failed: ${response.status}`)
+
+  const payload = await response.json()
+  const sets = Array.isArray(payload?.data) ? payload.data : []
+  if (!sets.length) return null
+
+  const best = sets
+    .map((set) => ({ set, score: scoreSetNameMatch(set.name, setName) }))
+    .sort((a, b) => b.score - a.score)[0]
+
+  if (!best || best.score < 0.7) return null
+  return best.set
+}
+
+async function fetchPokemonTcgCardsBySetId(setId) {
+  const url = `https://api.pokemontcg.io/v2/cards?q=${encodeURIComponent(`set.id:${setId}`)}&pageSize=250&select=id,name,rarity,tcgplayer,cardmarket`
+  const response = await fetch(url)
+  if (!response.ok) throw new Error(`Pokémon TCG cards lookup failed: ${response.status}`)
+
+  const payload = await response.json()
+  return Array.isArray(payload?.data) ? payload.data : []
+}
+
 export default async function handler(req, res) {
   const { set: setName, boosterBoxPrice } = req.query
 
@@ -178,18 +205,63 @@ export default async function handler(req, res) {
       source: 'live',
     })
   } catch (err) {
-    console.error(err)
+    console.error('TCGdex booster EV provider failed:', err)
 
+    try {
+      const pokemonSet = await fetchPokemonTcgSetByName(setName)
+      if (pokemonSet) {
+        const cards = await fetchPokemonTcgCardsBySetId(pokemonSet.id)
+        const rareSlotCards = cards.filter(looksLikeRareSlotCard)
+        const rareSlotPrices = rareSlotCards.map(extractMarketPrice).filter((price) => typeof price === 'number')
+
+        if (rareSlotPrices.length) {
+          const rareSlotAverage = rareSlotPrices.reduce((sum, value) => sum + value, 0) / rareSlotPrices.length
+          const expectedValueOfPulls = rareSlotAverage * 36
+          const fallbackBoxPrice = extractMarketPrice(pokemonSet)
+          const boosterPrice = Number.isFinite(userBoosterBoxPrice)
+            ? userBoosterBoxPrice
+            : Number.isFinite(fallbackBoxPrice)
+            ? fallbackBoxPrice
+            : null
+
+          const ev = boosterPrice != null ? expectedValueOfPulls - boosterPrice : null
+
+          res.status(200).json({
+            set: {
+              id: pokemonSet.id,
+              name: pokemonSet.name,
+              releaseDate: pokemonSet.releaseDate,
+            },
+            model: {
+              description:
+                'EV uses a simplified model: one rare-slot pull per pack over 36 packs, weighted by current market prices for rare/holo/ultra-rare cards.',
+              rareCardsCount: rareSlotPrices.length,
+            },
+            pricing: {
+              boosterBoxPrice: boosterPrice,
+              expectedValueOfPulls,
+              ev,
+            },
+            history: getBoosterHistoryBySetName(pokemonSet.name),
+            source: 'live-pokemontcg',
+          })
+          return
+        }
+      }
+    } catch (pokemonTcgError) {
+      console.error('Pokémon TCG booster EV provider failed:', pokemonTcgError)
+    }
+
+    const normalizedQuery = normalizeName(setName)
     const matchedFallbackSet =
-      fallbackSets.find((set) => normalizeName(set.name) === normalizeName(setName)) ||
-      fallbackSets.find((set) => normalizeName(set.name).includes(normalizeName(setName))) ||
+      fallbackSets
+        .map((set) => ({ set, score: scoreSetNameMatch(set.name, setName) }))
+        .sort((a, b) => b.score - a.score)[0]?.set ||
+      fallbackSets.find((set) => normalizeName(set.name).includes(normalizedQuery)) ||
       fallbackSets[0]
 
     const baseExpectedValue = 115
     const boosterPrice = Number.isFinite(userBoosterBoxPrice) ? userBoosterBoxPrice : 140
-    const expectedValueOfPulls = baseExpectedValue
-    const ev = expectedValueOfPulls - boosterPrice
-    const history = getBoosterHistoryBySetName(matchedFallbackSet.name)
 
     res.status(200).json({
       set: {
@@ -204,10 +276,10 @@ export default async function handler(req, res) {
       },
       pricing: {
         boosterBoxPrice: boosterPrice,
-        expectedValueOfPulls,
-        ev,
+        expectedValueOfPulls: baseExpectedValue,
+        ev: baseExpectedValue - boosterPrice,
       },
-      history,
+      history: getBoosterHistoryBySetName(matchedFallbackSet.name),
       source: 'fallback',
     })
   }
