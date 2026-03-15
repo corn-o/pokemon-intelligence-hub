@@ -9,7 +9,7 @@ export default function SetsPage() {
   useEffect(() => {
     async function loadSets() {
       try {
-        const res = await fetch('/api/sets')
+        const res = await fetch('/api/sets?quality=low')
         if (!res.ok) throw new Error('Request failed')
         const data = await res.json()
         setSets(data.sets || [])
@@ -43,11 +43,10 @@ export default function SetsPage() {
         <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {sets.map((set) => (
             <article key={set.id} className="rounded-xl border border-slate-800 bg-slate-900/70 p-4">
-              {set.symbol ? (
-                <img src={set.symbol} alt={`${set.name} symbol`} className="h-12 w-auto object-contain" />
-              ) : (
-                <div className="h-12" />
-              )}
+              <div className="flex h-14 items-center gap-3">
+                {set.symbol ? <img src={set.symbol} alt={`${set.name} symbol`} className="h-10 w-auto object-contain" /> : null}
+                {set.logo ? <img src={set.logo} alt={`${set.name} logo`} className="h-12 w-auto object-contain" /> : null}
+              </div>
               <h2 className="mt-3 text-lg font-semibold text-white">{set.name}</h2>
               <p className="text-sm text-slate-400">Set ID: {set.id}</p>
               <p className="mt-2 inline-flex rounded-md bg-slate-800/80 px-2 py-1 text-sm text-slate-200">
