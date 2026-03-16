@@ -1,16 +1,9 @@
 import { useEffect, useState } from 'react'
-import { Bar } from 'react-chartjs-2'
-import {
-  Chart as ChartJS,
-  CategoryScale,
-  LinearScale,
-  BarElement,
-  Title,
-  Tooltip,
-  Legend,
-} from 'chart.js'
+import dynamic from 'next/dynamic'
 
-ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend)
+const Bar = dynamic(() => import('react-chartjs-2').then((module) => module.Bar), {
+  ssr: false,
+})
 
 export default function HomeDashboardPage() {
   const [query, setQuery] = useState('charizard')
@@ -18,6 +11,24 @@ export default function HomeDashboardPage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [source, setSource] = useState('live')
+  const [chartReady, setChartReady] = useState(false)
+
+  useEffect(() => {
+    let mounted = true
+
+    async function registerChartJs() {
+      const chartJs = await import('chart.js')
+      const { Chart, CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend } = chartJs
+      Chart.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend)
+      if (mounted) setChartReady(true)
+    }
+
+    registerChartJs()
+
+    return () => {
+      mounted = false
+    }
+  }, [])
 
   async function runSearch(name) {
     if (!name) return
@@ -103,16 +114,20 @@ export default function HomeDashboardPage() {
             </div>
           </article>
           <div className="rounded-xl border border-slate-800 bg-slate-900/80 p-4">
-            <Bar
-              data={chartData}
-              options={{
-                responsive: true,
-                plugins: {
-                  legend: { position: 'top' },
-                  title: { display: true, text: `Pricing for ${card.name}` },
-                },
-              }}
-            />
+            {chartReady ? (
+              <Bar
+                data={chartData}
+                options={{
+                  responsive: true,
+                  plugins: {
+                    legend: { position: 'top' },
+                    title: { display: true, text: `Pricing for ${card.name}` },
+                  },
+                }}
+              />
+            ) : (
+              <p className="text-sm text-slate-400">Loading chart...</p>
+            )}
           </div>
         </section>
       )}
