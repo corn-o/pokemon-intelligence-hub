@@ -13,6 +13,10 @@ export default function HomeDashboardPage() {
   const [source, setSource] = useState('live')
   const [chartReady, setChartReady] = useState(false)
 
+  function hasMarketPrice(nextCard) {
+    return typeof nextCard?.tcgplayer?.marketPrice === 'number'
+  }
+
   useEffect(() => {
     let mounted = true
 
@@ -38,7 +42,8 @@ export default function HomeDashboardPage() {
       const res = await fetch(`/api/cards?name=${encodeURIComponent(name)}`)
       if (!res.ok) throw new Error('Request failed')
       const data = await res.json()
-      setCard(data.cards?.[0] || null)
+      const cards = Array.isArray(data.cards) ? data.cards : []
+      setCard(cards.find(hasMarketPrice) || cards[0] || null)
       setSource(data.source || 'live')
     } catch (err) {
       setError('Failed to fetch pricing. Try again later.')
@@ -99,7 +104,7 @@ export default function HomeDashboardPage() {
         {error && <p className="mt-3 text-sm text-rose-300">{error}</p>}
         {source === 'fallback' && (
           <p className="mt-3 rounded-lg border border-amber-500/40 bg-amber-400/10 px-3 py-2 text-xs text-amber-200">
-            Live pricing API is unavailable. Showing fallback card pricing.
+            Using fallback pricing snapshot while live marketplace data is unavailable.
           </p>
         )}
       </section>

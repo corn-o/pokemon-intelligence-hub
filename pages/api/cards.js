@@ -85,6 +85,15 @@ function hasAnyPrice(price = {}) {
   return [price.lowPrice, price.marketPrice, price.highPrice].some((value) => typeof value === 'number')
 }
 
+function sortPricedCardsFirst(cards = []) {
+  return [...cards].sort((left, right) => {
+    const leftHasPrice = hasAnyPrice(left?.tcgplayer)
+    const rightHasPrice = hasAnyPrice(right?.tcgplayer)
+    if (leftHasPrice === rightHasPrice) return 0
+    return leftHasPrice ? -1 : 1
+  })
+}
+
 function mapCard(card, marketById = new Map()) {
   const setName = card.set?.name || card.set?.id || 'Unknown'
   const rawImage = card.image || card.imageUrl || card.images?.large || card.images?.small || ''
@@ -292,13 +301,13 @@ export default async function handler(req, res) {
         const cardsFromTcgdex = Array.isArray(payload) ? payload : []
         const missingIds = cardsFromTcgdex.filter((card) => !hasAnyPrice(extractPriceSnapshot(card))).map((card) => card.id)
         const marketById = await fetchPokemonTcgMarketByIds(missingIds)
-        const cards = cardsFromTcgdex.map((card) => mapCard(card, marketById))
+        const cards = sortPricedCardsFirst(cardsFromTcgdex.map((card) => mapCard(card, marketById)))
 
         if (!cards.some((card) => hasAnyPrice(card.tcgplayer))) {
           try {
             const pokemonTcgCards = await fetchPokemonTcgCardsByName(name)
             if (pokemonTcgCards.length) {
-              res.status(200).json({ cards: pokemonTcgCards, source: 'live-pokemontcg' })
+              res.status(200).json({ cards: sortPricedCardsFirst(pokemonTcgCards), source: 'live-pokemontcg' })
               return
             }
           } catch (pokemonTcgError) {
@@ -311,7 +320,7 @@ export default async function handler(req, res) {
         try {
           const pokemonTcgCards = await fetchPokemonTcgCardsByName(name)
           if (pokemonTcgCards.length) {
-            res.status(200).json({ cards: pokemonTcgCards, source: 'live-pokemontcg' })
+            res.status(200).json({ cards: sortPricedCardsFirst(pokemonTcgCards), source: 'live-pokemontcg' })
             return
           }
         } catch (pokemonTcgError) {
