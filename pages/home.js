@@ -17,6 +17,20 @@ export default function HomeDashboardPage() {
     return typeof nextCard?.tcgplayer?.marketPrice === 'number'
   }
 
+  function hasAnyPrice(nextCard) {
+    return ['lowPrice', 'marketPrice', 'highPrice'].some((key) => typeof nextCard?.tcgplayer?.[key] === 'number')
+  }
+
+  function resolveMarketPrice(nextCard) {
+    if (typeof nextCard?.tcgplayer?.marketPrice === 'number') return nextCard.tcgplayer.marketPrice
+    const low = nextCard?.tcgplayer?.lowPrice
+    const high = nextCard?.tcgplayer?.highPrice
+    if (typeof low === 'number' && typeof high === 'number') return (low + high) / 2
+    if (typeof low === 'number') return low
+    if (typeof high === 'number') return high
+    return null
+  }
+
   useEffect(() => {
     let mounted = true
 
@@ -43,7 +57,7 @@ export default function HomeDashboardPage() {
       if (!res.ok) throw new Error('Request failed')
       const data = await res.json()
       const cards = Array.isArray(data.cards) ? data.cards : []
-      setCard(cards.find(hasMarketPrice) || cards[0] || null)
+      setCard(cards.find(hasMarketPrice) || cards.find(hasAnyPrice) || cards[0] || null)
       setSource(data.source || 'live')
     } catch (err) {
       setError('Failed to fetch pricing. Try again later.')
@@ -71,7 +85,7 @@ export default function HomeDashboardPage() {
             label: `${card.name} (USD)`,
             data: [
               card.tcgplayer?.lowPrice ?? 0,
-              card.tcgplayer?.marketPrice ?? 0,
+              resolveMarketPrice(card) ?? 0,
               card.tcgplayer?.highPrice ?? 0,
             ],
             backgroundColor: ['rgba(59, 130, 246, 0.5)', 'rgba(16, 185, 129, 0.5)', 'rgba(239, 68, 68, 0.5)'],
