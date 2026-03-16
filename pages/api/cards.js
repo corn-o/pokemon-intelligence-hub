@@ -295,10 +295,14 @@ export default async function handler(req, res) {
         const cards = cardsFromTcgdex.map((card) => mapCard(card, marketById))
 
         if (!cards.some((card) => hasAnyPrice(card.tcgplayer))) {
-          const pokemonTcgCards = await fetchPokemonTcgCardsByName(name)
-          if (pokemonTcgCards.length) {
-            res.status(200).json({ cards: pokemonTcgCards, source: 'live-pokemontcg' })
-            return
+          try {
+            const pokemonTcgCards = await fetchPokemonTcgCardsByName(name)
+            if (pokemonTcgCards.length) {
+              res.status(200).json({ cards: pokemonTcgCards, source: 'live-pokemontcg' })
+              return
+            }
+          } catch (pokemonTcgError) {
+            console.warn('Supplemental Pokémon TCG pricing lookup failed, returning TCGdex results:', pokemonTcgError)
           }
         }
 
