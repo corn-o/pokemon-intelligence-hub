@@ -1,3 +1,4 @@
+import Link from 'next/link'
 import { useEffect, useMemo, useRef, useState } from 'react'
 
 const PAGE_SIZE = 20
@@ -120,7 +121,7 @@ export default function SetsPage() {
     <div className="space-y-6">
       <section className="rounded-2xl border border-slate-800 bg-slate-900/60 p-6">
         <h1 className="text-3xl font-black text-white">Pokémon TCG Sets</h1>
-        <p className="mt-2 text-slate-300">Browse sets with logos and card totals.</p>
+        <p className="mt-2 text-slate-300">Browse sets, then open a dedicated set view for card-level pricing.</p>
         {source === 'fallback' && (
           <p className="mt-3 rounded-lg border border-amber-500/40 bg-amber-400/10 px-3 py-2 text-xs text-amber-200">
             Live set API is unavailable. Showing fallback set data.
@@ -200,7 +201,12 @@ export default function SetsPage() {
                           <img src={set.symbol} alt={`${set.name} symbol`} className="h-8 w-8 object-contain" />
                         ) : null}
                         <div>
-                          <p className="font-medium text-white">{set.name}</p>
+                          <Link
+                            href={`/sets/${encodeURIComponent(set.name)}`}
+                            className="font-medium text-cyan-300 hover:text-cyan-200"
+                          >
+                            {set.name}
+                          </Link>
                           {set.logo ? (
                             <img src={set.logo} alt={`${set.name} logo`} className="mt-1 h-6 w-auto object-contain" />
                           ) : null}
