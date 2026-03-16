@@ -4,8 +4,7 @@ import { useRouter } from 'next/router'
 const links = [
   { href: '/', label: 'Home' },
   { href: '/sets', label: 'Sets' },
-  { href: '/cards', label: 'Cards' },
-  { href: '/dashboard', label: 'Dashboard' },
+  { href: '/home', label: 'Home Dashboard' },
   { href: '/booster-ev', label: 'Booster EV' },
 ]
 

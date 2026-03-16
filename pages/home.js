@@ -1,23 +1,52 @@
 import { useEffect, useState } from 'react'
-import { Bar } from 'react-chartjs-2'
-import {
-  Chart as ChartJS,
-  CategoryScale,
-  LinearScale,
-  BarElement,
-  Title,
-  Tooltip,
-  Legend,
-} from 'chart.js'
+import dynamic from 'next/dynamic'
 
-ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend)
+const Bar = dynamic(() => import('react-chartjs-2').then((module) => module.Bar), {
+  ssr: false,
+})
 
-export default function DashboardPage() {
+export default function HomeDashboardPage() {
   const [query, setQuery] = useState('charizard')
   const [card, setCard] = useState(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [source, setSource] = useState('live')
+  const [chartReady, setChartReady] = useState(false)
+
+  function hasMarketPrice(nextCard) {
+    return typeof nextCard?.tcgplayer?.marketPrice === 'number'
+  }
+
+  function hasAnyPrice(nextCard) {
+    return ['lowPrice', 'marketPrice', 'highPrice'].some((key) => typeof nextCard?.tcgplayer?.[key] === 'number')
+  }
+
+  function resolveMarketPrice(nextCard) {
+    if (typeof nextCard?.tcgplayer?.marketPrice === 'number') return nextCard.tcgplayer.marketPrice
+    const low = nextCard?.tcgplayer?.lowPrice
+    const high = nextCard?.tcgplayer?.highPrice
+    if (typeof low === 'number' && typeof high === 'number') return (low + high) / 2
+    if (typeof low === 'number') return low
+    if (typeof high === 'number') return high
+    return null
+  }
+
+  useEffect(() => {
+    let mounted = true
+
+    async function registerChartJs() {
+      const chartJs = await import('chart.js')
+      const { Chart, CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend } = chartJs
+      Chart.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend)
+      if (mounted) setChartReady(true)
+    }
+
+    registerChartJs()
+
+    return () => {
+      mounted = false
+    }
+  }, [])
 
   async function runSearch(name) {
     if (!name) return
@@ -27,7 +56,8 @@ export default function DashboardPage() {
       const res = await fetch(`/api/cards?name=${encodeURIComponent(name)}`)
       if (!res.ok) throw new Error('Request failed')
       const data = await res.json()
-      setCard(data.cards?.[0] || null)
+      const cards = Array.isArray(data.cards) ? data.cards : []
+      setCard(cards.find(hasMarketPrice) || cards.find(hasAnyPrice) || cards[0] || null)
       setSource(data.source || 'live')
     } catch (err) {
       setError('Failed to fetch pricing. Try again later.')
@@ -55,7 +85,7 @@ export default function DashboardPage() {
             label: `${card.name} (USD)`,
             data: [
               card.tcgplayer?.lowPrice ?? 0,
-              card.tcgplayer?.marketPrice ?? 0,
+              resolveMarketPrice(card) ?? 0,
               card.tcgplayer?.highPrice ?? 0,
             ],
             backgroundColor: ['rgba(59, 130, 246, 0.5)', 'rgba(16, 185, 129, 0.5)', 'rgba(239, 68, 68, 0.5)'],
@@ -88,7 +118,7 @@ export default function DashboardPage() {
         {error && <p className="mt-3 text-sm text-rose-300">{error}</p>}
         {source === 'fallback' && (
           <p className="mt-3 rounded-lg border border-amber-500/40 bg-amber-400/10 px-3 py-2 text-xs text-amber-200">
-            Live pricing API is unavailable. Showing fallback card pricing.
+            Using fallback pricing snapshot while live marketplace data is unavailable.
           </p>
         )}
       </section>
@@ -103,16 +133,20 @@ export default function DashboardPage() {
             </div>
           </article>
           <div className="rounded-xl border border-slate-800 bg-slate-900/80 p-4">
-            <Bar
-              data={chartData}
-              options={{
-                responsive: true,
-                plugins: {
-                  legend: { position: 'top' },
-                  title: { display: true, text: `Pricing for ${card.name}` },
-                },
-              }}
-            />
+            {chartReady ? (
+              <Bar
+                data={chartData}
+                options={{
+                  responsive: true,
+                  plugins: {
+                    legend: { position: 'top' },
+                    title: { display: true, text: `Pricing for ${card.name}` },
+                  },
+                }}
+              />
+            ) : (
+              <p className="text-sm text-slate-400">Loading chart...</p>
+            )}
           </div>
         </section>
       )}

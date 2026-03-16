@@ -47,8 +47,8 @@ export default function Home() {
           market pricing in one place.
         </p>
         <div className="mt-6 flex flex-wrap gap-3">
-          <Link href="/cards" className="rounded-lg bg-cyan-400 px-4 py-2 font-semibold text-slate-900 hover:bg-cyan-300">
-            Explore cards
+          <Link href="/home" className="rounded-lg bg-cyan-400 px-4 py-2 font-semibold text-slate-900 hover:bg-cyan-300">
+            Open dashboard
           </Link>
           <Link href="/sets" className="rounded-lg border border-slate-700 px-4 py-2 font-semibold text-slate-200 hover:bg-slate-800">
             Browse sets
