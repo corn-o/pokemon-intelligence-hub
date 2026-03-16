@@ -7,6 +7,15 @@ import { resolveTcgdexImage } from '../../utils/tcgdexAssets'
  * to TCGdex / Pokémon TCG APIs for name or id based card lookups.
  */
 
+function parseNumeric(value) {
+  if (typeof value === 'number' && Number.isFinite(value)) return value
+  if (typeof value === 'string') {
+    const parsed = Number.parseFloat(value.replace(/[$,]/g, ''))
+    return Number.isFinite(parsed) ? parsed : null
+  }
+  return null
+}
+
 function extractPriceSnapshot(card = {}) {
   const marketSources = [
     card.tcgplayer,
@@ -17,6 +26,9 @@ function extractPriceSnapshot(card = {}) {
     card.price,
     card.price_data,
     card.market_prices,
+    card.stats,
+    card.stats?.kwan,
+    card.kwan,
   ].filter(Boolean)
 
   let low = null
@@ -25,19 +37,27 @@ function extractPriceSnapshot(card = {}) {
 
   const numericValues = []
 
-  const visit = (value) => {
-    if (!value || typeof value !== 'object') return
+  const visit = (value, parentKey = '') => {
+    if (value == null) return
+
+    if (Array.isArray(value)) {
+      value.forEach((entry) => visit(entry, parentKey))
+      return
+    }
+
+    const directNumeric = parseNumeric(value)
+    if (directNumeric != null) {
+      numericValues.push(directNumeric)
+      if (low == null && /(low|min)/i.test(parentKey)) low = directNumeric
+      if (market == null && /(market|mid|trend|average|avg|sell|kwan)/i.test(parentKey)) market = directNumeric
+      if (high == null && /(high|max)/i.test(parentKey)) high = directNumeric
+      return
+    }
+
+    if (typeof value !== 'object') return
 
     for (const [key, raw] of Object.entries(value)) {
-      if (typeof raw === 'number' && Number.isFinite(raw)) {
-        numericValues.push(raw)
-
-        if (low == null && /(low|min)/i.test(key)) low = raw
-        if (market == null && /(market|mid|trend|average|avg|sell)/i.test(key)) market = raw
-        if (high == null && /(high|max)/i.test(key)) high = raw
-      } else if (raw && typeof raw === 'object') {
-        visit(raw)
-      }
+      visit(raw, key)
     }
   }
 
