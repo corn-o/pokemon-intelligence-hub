@@ -18,6 +18,27 @@ function resolveSetLogo(set, quality = 'low') {
   return resolveSetAsset(set.logo, quality) || resolveSetAsset(set.symbol, quality)
 }
 
+function toArray(payload) {
+  if (Array.isArray(payload)) return payload
+  if (Array.isArray(payload?.sets)) return payload.sets
+  if (Array.isArray(payload?.data)) return payload.data
+  if (Array.isArray(payload?.results)) return payload.results
+  return []
+}
+
+function mapPokedataSet(set = {}) {
+  const cardCount =
+    Number(set.card_count ?? set.total_cards ?? set.total ?? set.cardCount?.total ?? set.cardCount ?? set.count) || 0
+
+  return {
+    id: String(set.set_id ?? set.id ?? set.code ?? set.slug ?? set.name ?? '').trim(),
+    name: String(set.set_name ?? set.name ?? set.title ?? set.id ?? '').trim(),
+    cardCount: { total: cardCount || null },
+    symbol: set.symbol ?? set.symbol_url ?? set.images?.symbol ?? set.logo ?? null,
+    logo: set.logo ?? set.logo_url ?? set.images?.logo ?? set.symbol ?? null,
+  }
+}
+
 function mapTcgdexSets(data, quality = 'low') {
   return data
     .filter((set) => set.name && set.cardCount)
@@ -30,16 +51,24 @@ function mapTcgdexSets(data, quality = 'low') {
     }))
 }
 
-function mapPokemonTcgSets(data) {
-  return data
-    .filter((set) => set.id && set.name && set.total)
+async function fetchPokedataSets({ setName = '', quality = 'low' } = {}) {
+  const query = new URLSearchParams()
+  if (setName) query.set('set_name', setName)
+
+  const response = await fetch(`https://www.pokedata.io/api/sets?${query.toString()}`)
+  if (!response.ok) throw new Error(`Pokedata failed with ${response.status}`)
+
+  const payload = await response.json()
+  const sets = toArray(payload)
+    .map(mapPokedataSet)
+    .filter((set) => set.id && set.name)
     .map((set) => ({
-      id: set.id,
-      name: set.name,
-      cardCount: { total: set.total },
-      symbol: set.images?.symbol || set.images?.logo || null,
-      logo: set.images?.logo || set.images?.symbol || null,
+      ...set,
+      symbol: resolveSetAsset(set.symbol, quality),
+      logo: resolveSetAsset(set.logo, quality),
     }))
+
+  return sets
 }
 
 async function fetchTcgdexSets(quality = 'low') {
@@ -50,19 +79,22 @@ async function fetchTcgdexSets(quality = 'low') {
   return mapTcgdexSets(data, quality)
 }
 
-async function fetchPokemonTcgSets() {
-  const response = await fetch('https://api.pokemontcg.io/v2/sets?orderBy=-releaseDate&pageSize=250')
-  if (!response.ok) throw new Error(`PokemonTCG failed with ${response.status}`)
-
-  const payload = await response.json()
-  return mapPokemonTcgSets(payload.data || [])
-}
-
 /**
  * API route to return a list of Pokémon TCG sets.
  */
 export default async function handler(req, res) {
   const requestedQuality = req.query?.quality === 'high' ? 'high' : 'low'
+  const requestedSetName = typeof req.query?.set_name === 'string' ? req.query.set_name.trim() : ''
+
+  try {
+    const pokedataSets = await fetchPokedataSets({ setName: requestedSetName, quality: requestedQuality })
+    if (pokedataSets.length) {
+      res.status(200).json({ sets: pokedataSets, source: 'live-pokedata' })
+      return
+    }
+  } catch (pokedataError) {
+    console.error('Pokedata sets API failed:', pokedataError)
+  }
 
   try {
     const tcgdexSets = await fetchTcgdexSets(requestedQuality)
@@ -70,14 +102,6 @@ export default async function handler(req, res) {
     return
   } catch (tcgdexError) {
     console.error('TCGdex sets API failed:', tcgdexError)
-  }
-
-  try {
-    const pokemonTcgSets = await fetchPokemonTcgSets()
-    res.status(200).json({ sets: pokemonTcgSets, source: 'live-pokemontcg' })
-    return
-  } catch (pokemonTcgError) {
-    console.error('PokemonTCG sets API failed:', pokemonTcgError)
   }
 
   res.status(200).json({ sets: fallbackSets, source: 'fallback' })
