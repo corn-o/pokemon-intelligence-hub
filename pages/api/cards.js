@@ -294,6 +294,14 @@ export default async function handler(req, res) {
         const marketById = await fetchPokemonTcgMarketByIds(missingIds)
         const cards = cardsFromTcgdex.map((card) => mapCard(card, marketById))
 
+        if (!cards.some((card) => hasAnyPrice(card.tcgplayer))) {
+          const pokemonTcgCards = await fetchPokemonTcgCardsByName(name)
+          if (pokemonTcgCards.length) {
+            res.status(200).json({ cards: pokemonTcgCards, source: 'live-pokemontcg' })
+            return
+          }
+        }
+
         res.status(200).json({ cards, source: 'live' })
       } catch (err) {
         try {
