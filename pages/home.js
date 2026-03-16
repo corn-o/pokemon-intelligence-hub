@@ -12,7 +12,7 @@ import {
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend)
 
-export default function DashboardPage() {
+export default function HomeDashboardPage() {
   const [query, setQuery] = useState('charizard')
   const [card, setCard] = useState(null)
   const [loading, setLoading] = useState(false)
